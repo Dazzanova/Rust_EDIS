@@ -20,7 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(0) => return,
 
                     Ok(n) => {
-                        println!("Received: {:?}", &buf[..n]);
+                        let data = String::from_utf8_lossy(&buf[..n]);
+                        println!("Received: {:?}", data);
                     }
 
                     Err(e) => {
