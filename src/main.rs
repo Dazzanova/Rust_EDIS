@@ -1,6 +1,12 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
+fn parse_command(data: &str) -> &str {
+    let parts: Vec<&str> = data.split("\r\n").collect();
+
+    parts[2]
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
@@ -24,13 +30,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         println!("Received: {:?}", data);
 
-                        let parts: Vec<&str> = data.split("\r\n").collect();
+                        let command = parse_command(&data);
 
-                        if parts.len() >= 3 {
-                            let command = parts[2];
-
-                            println!("Command: {}", command);
-                        }
+                        println!("Command: {}", command);
                     }
 
                     Err(e) => {
