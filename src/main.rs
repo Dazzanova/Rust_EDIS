@@ -4,6 +4,12 @@ use tokio::net::TcpListener;
 fn parse_command(data: &str) -> Option<&str> {
     let parts: Vec<&str> = data.split("\r\n").collect();
 
+    let count = parts.first()?.strip_prefix('*')?;
+
+    if count != "1" {
+        return None;
+    }
+
     parts.get(2).copied()
 }
 
