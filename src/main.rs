@@ -21,7 +21,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     Ok(n) => {
                         let data = String::from_utf8_lossy(&buf[..n]);
+
                         println!("Received: {:?}", data);
+
+                        let parts: Vec<&str> = data.split("\r\n").collect();
+
+                        if parts.len() >= 3 {
+                            let command = parts[2];
+
+                            println!("Command: {}", command);
+                        }
                     }
 
                     Err(e) => {
