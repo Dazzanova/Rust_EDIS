@@ -10,6 +10,12 @@ fn parse_command(data: &str) -> Option<&str> {
         return None;
     }
 
+    let length = parts.get(1)?.strip_prefix('$')?;
+
+    if length != "4" {
+        return None;
+    }
+
     parts.get(2).copied()
 }
 
@@ -38,6 +44,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         if let Some(command) = parse_command(&data) {
                             println!("Command: {}", command);
+
+                            if command == "PING" {
+                                if let Err(e) = socket.write_all(b"+PONG\r\n").await {
+                                    eprintln!("Failed to write to socket: {}", e);
+                                    return;
+                                }
+                            }
                         }
                     }
 
@@ -45,11 +58,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         eprintln!("Failed to read from socket: {}", e);
                         return;
                     }
-                }
-
-                if let Err(e) = socket.write_all(b"+PONG\r\n").await {
-                    eprintln!("Failed to write to socket: {}", e);
-                    return;
                 }
             }
         });
