@@ -12,7 +12,9 @@ fn parse_command(data: &str) -> Option<&str> {
 
     let length = parts.get(1)?.strip_prefix('$')?;
 
-    if length != "4" {
+    let length: usize = length.parse().ok()?;
+
+    if length != 4 {
         return None;
     }
 
