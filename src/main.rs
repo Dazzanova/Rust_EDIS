@@ -1,30 +1,47 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-fn parse_command(data: &str) -> Option<&str> {
+#[derive(Debug)]
+enum Command {
+    Ping,
+    Get(String),
+    Set(String, String),
+}
+
+fn parse_command(data: &str) -> Option<Command> {
     let parts: Vec<&str> = data.split("\r\n").collect();
 
-    let count = parts.first()?.strip_prefix('*')?;
+    let count: usize = parts.first()?.strip_prefix('*')?.parse().ok()?;
 
-    if count != "1" {
-        return None;
+    let mut args = Vec::new();
+    let mut index = 1;
+
+    for _ in 0..count {
+        let length: usize = parts.get(index)?.strip_prefix('$')?.parse().ok()?;
+
+        let value = *parts.get(index + 1)?;
+
+        if value.len() != length {
+            return None;
+        }
+
+        args.push(value);
+        index += 2;
     }
 
-    let length = parts.get(1)?.strip_prefix('$')?;
+    match args.as_slice() {
+        [command] if command.eq_ignore_ascii_case("PING") => Some(Command::Ping),
 
-    let length: usize = length.parse().ok()?;
+        [command, key] if command.eq_ignore_ascii_case("GET") => {
+            Some(Command::Get((*key).to_string()))
+        }
 
-    if length != 4 {
-        return None;
+        [command, key, value] if command.eq_ignore_ascii_case("SET") => {
+            Some(Command::Set((*key).to_string(), (*value).to_string()))
+        }
+
+        _ => None,
     }
-
-    let command = parts.get(2)?;
-
-    if command.len() != length {
-        return None;
-    }
-
-    Some(command)
 }
 
 #[tokio::main]
@@ -51,12 +68,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("Received: {:?}", data);
 
                         if let Some(command) = parse_command(&data) {
-                            println!("Command: {}", command);
+                            println!("Command: {:?}", command);
 
-                            if command == "PING" {
-                                if let Err(e) = socket.write_all(b"+PONG\r\n").await {
-                                    eprintln!("Failed to write to socket: {}", e);
-                                    return;
+                            match command {
+                                Command::Ping => {
+                                    if let Err(e) = socket.write_all(b"+PONG\r\n").await {
+                                        eprintln!("Failed to write to socket: {}", e);
+                                        return;
+                                    }
+                                }
+
+                                Command::Get(key) => {
+                                    println!("GET key: {}", key);
+                                }
+
+                                Command::Set(key, value) => {
+                                    println!("SET key: {}, value: {}", key, value);
                                 }
                             }
                         }
