@@ -18,7 +18,13 @@ fn parse_command(data: &str) -> Option<&str> {
         return None;
     }
 
-    parts.get(2).copied()
+    let command = parts.get(2)?;
+
+    if command.len() != length {
+        return None;
+    }
+
+    Some(command)
 }
 
 #[tokio::main]
