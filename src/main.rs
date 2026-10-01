@@ -1,3 +1,6 @@
+mod store;
+
+use store::Store;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
@@ -6,6 +9,7 @@ enum Command {
     Ping,
     Get(String),
     Set(String, String),
+    Del(String),
 }
 
 fn parse_command(data: &str) -> Option<Command> {
@@ -30,14 +34,23 @@ fn parse_command(data: &str) -> Option<Command> {
     }
 
     match args.as_slice() {
-        [command] if command.eq_ignore_ascii_case("PING") => Some(Command::Ping),
+        [command] if command.eq_ignore_ascii_case("PING") => {
+            Some(Command::Ping)
+        }
 
         [command, key] if command.eq_ignore_ascii_case("GET") => {
             Some(Command::Get((*key).to_string()))
         }
 
         [command, key, value] if command.eq_ignore_ascii_case("SET") => {
-            Some(Command::Set((*key).to_string(), (*value).to_string()))
+            Some(Command::Set(
+                (*key).to_string(),
+                (*value).to_string(),
+            ))
+        }
+
+        [command, key] if command.eq_ignore_ascii_case("DEL") => {
+            Some(Command::Del((*key).to_string()))
         }
 
         _ => None,
@@ -50,10 +63,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Rust_EDIS server running on 127.0.0.1:6379...");
 
+    let store = Store::new();
+
     loop {
         let (mut socket, addr) = listener.accept().await?;
 
         println!("New client connected: {}", addr);
+
+        let store = store.clone();
 
         tokio::spawn(async move {
             let mut buf = [0; 512];
@@ -72,18 +89,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                             match command {
                                 Command::Ping => {
-                                    if let Err(e) = socket.write_all(b"+PONG\r\n").await {
-                                        eprintln!("Failed to write to socket: {}", e);
+                                    if let Err(e) =
+                                        socket.write_all(b"+PONG\r\n").await
+                                    {
+                                        eprintln!(
+                                            "Failed to write to socket: {}",
+                                            e
+                                        );
+                                        return;
+                                    }
+                                }
+
+                                Command::Set(key, value) => {
+                                    store.set(key, value);
+
+                                    if let Err(e) =
+                                        socket.write_all(b"+OK\r\n").await
+                                    {
+                                        eprintln!(
+                                            "Failed to write to socket: {}",
+                                            e
+                                        );
                                         return;
                                     }
                                 }
 
                                 Command::Get(key) => {
-                                    println!("GET key: {}", key);
+                                    match store.get(&key) {
+                                        Some(value) => {
+                                            let response =
+                                                format!("${}\r\n{}\r\n", value.len(), value);
+
+                                            if let Err(e) =
+                                                socket.write_all(response.as_bytes()).await
+                                            {
+                                                eprintln!(
+                                                    "Failed to write to socket: {}",
+                                                    e
+                                                );
+                                                return;
+                                            }
+                                        }
+
+                                        None => {
+                                            if let Err(e) =
+                                                socket.write_all(b"$-1\r\n").await
+                                            {
+                                                eprintln!(
+                                                    "Failed to write to socket: {}",
+                                                    e
+                                                );
+                                                return;
+                                            }
+                                        }
+                                    }
                                 }
 
-                                Command::Set(key, value) => {
-                                    println!("SET key: {}, value: {}", key, value);
+                                Command::Del(key) => {
+                                    let removed = store.del(&key);
+
+                                    let response = if removed {
+                                        b":1\r\n"
+                                    } else {
+                                        b":0\r\n"
+                                    };
+
+                                    if let Err(e) =
+                                        socket.write_all(response).await
+                                    {
+                                        eprintln!(
+                                            "Failed to write to socket: {}",
+                                            e
+                                        );
+                                        return;
+                                    }
                                 }
                             }
                         }
